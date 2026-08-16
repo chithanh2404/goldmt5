@@ -1,5 +1,5 @@
-import { supabase } from '../supabase.js';
-import { verifyToken, isAdminEmail } from '../utils/hash.js';
+import { supabase } from './supabase.js';
+import { verifyToken, isAdminEmail } from './utils/hash.js';
 
 export async function authMiddleware(req, res, next){
   const auth = req.headers.authorization;
