@@ -1,11 +1,19 @@
 services:
-  - type: web
+    - type: web
     name: gold-mt5-backend
     env: node
-    plan: free
+    plan: free # <-- đổi từ starter sang free
     region: singapore
     rootDir: backend
     buildCommand: npm install
+    startCommand: npm start
+    - type: web
+    name: gold-mt5-frontend
+    env: static
+    plan: free # <-- static free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath:./dist
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
