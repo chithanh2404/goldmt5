@@ -24,16 +24,23 @@ router.get('/my-data', async (req,res)=>{
     const totalPool = (allApproved||[]).reduce((s,i)=>s+parseFloat(i.amount),0);
     const sharePercent = totalPool>0 ? approvedCapital/totalPool*100 : 0;
 
+    // Tổng đã trả toàn hệ thống (để trừ vào Balance Bot)
+    const { data: allPayouts } = await supabase.from('payouts').select('amount');
+    const allPayoutsTotal = (allPayouts||[]).reduce((s,p)=>s+parseFloat(p.amount),0);
+
     return res.json({
       success: true,
-      stats: { totalInvested: approvedCapital, totalProfitReceived, ROI, sharePercent },
+      stats: { totalInvested: approvedCapital, totalProfitReceived, ROI, sharePercent, totalPool },
       investments: investments||[],
       transactions: transactions||[],
       payouts: payouts||[],
       bankInfo: req.user.bank_info||{},
       usdtInfo: req.user.usdt_info||{},
       preferredPayout: req.user.preferred_payout||'BANK',
-      profits: profits||[]
+      profits: profits||[],
+      totalPool,
+      allPayoutsTotal,
+      realBotBalance: null // sẽ tính ở frontend: latest MT5 balance - allPayoutsTotal
     });
   }catch(e){ res.json({ error: e.toString() }); }
 });
