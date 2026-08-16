@@ -2,7 +2,7 @@ services:
   - type: web
     name: gold-mt5-backend
     env: node
-    plan: starter
+    plan: free
     region: singapore
     rootDir: backend
     buildCommand: npm install
