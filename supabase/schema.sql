@@ -1,12 +1,12 @@
--- GOLD MT5 INVESTOR SYSTEM - SUPABASE SCHEMA V1
+-- GOLD MT5 INVESTOR SYSTEM - SUPABASE SCHEMA V1.1 (FIXED)
 -- Run this in Supabase SQL Editor
 
 -- Enable extensions
 create extension if not exists "uuid-ossp";
 create extension if not exists "pgcrypto";
 
--- USERS TABLE (custom auth to keep compatible with old SHA256 but upgraded to bcrypt)
-create table public.users (
+-- USERS TABLE
+create table if not exists public.users (
   id uuid primary key default uuid_generate_v4(),
   email text unique not null,
   full_name text not null,
@@ -24,7 +24,7 @@ create table public.users (
 );
 
 -- INVESTMENTS
-create table public.investments (
+create table if not exists public.investments (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid references public.users(id) on delete cascade,
   amount numeric not null,
@@ -38,8 +38,8 @@ create table public.investments (
   approved_at timestamptz
 );
 
--- TRANSACTIONS (history)
-create table public.transactions (
+-- TRANSACTIONS
+create table if not exists public.transactions (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid references public.users(id) on delete cascade,
   type text not null check (type in ('INVEST','PAYOUT','DEPOSIT')),
@@ -49,7 +49,7 @@ create table public.transactions (
 );
 
 -- PAYOUTS
-create table public.payouts (
+create table if not exists public.payouts (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid references public.users(id) on delete cascade,
   amount numeric not null,
@@ -65,8 +65,8 @@ create table public.payouts (
   created_at timestamptz default now()
 );
 
--- USDT DEPOSIT WALLETS (pool)
-create table public.deposit_wallets (
+-- USDT DEPOSIT WALLETS
+create table if not exists public.deposit_wallets (
   id uuid primary key default uuid_generate_v4(),
   network text not null default 'BEP20',
   address text unique not null,
@@ -81,8 +81,8 @@ create table public.deposit_wallets (
   created_at timestamptz default now()
 );
 
--- BOT PROFITS (MT5 bot pushes every 15m)
-create table public.bot_profits (
+-- BOT PROFITS
+create table if not exists public.bot_profits (
   id uuid primary key default uuid_generate_v4(),
   date date not null,
   time time,
@@ -103,7 +103,7 @@ create table public.bot_profits (
 );
 
 -- DEPOSIT CHECK LOGS
-create table public.deposit_logs (
+create table if not exists public.deposit_logs (
   id uuid primary key default uuid_generate_v4(),
   wallet_id uuid references public.deposit_wallets(id),
   wallet_label text,
@@ -117,8 +117,8 @@ create table public.deposit_logs (
   created_at timestamptz default now()
 );
 
--- OTP (forgot password)
-create table public.otps (
+-- OTP
+create table if not exists public.otps (
   id uuid primary key default uuid_generate_v4(),
   email text not null,
   otp text not null,
@@ -126,15 +126,15 @@ create table public.otps (
   created_at timestamptz default now()
 );
 
--- INDEXES
-create index idx_investments_user on public.investments(user_id);
-create index idx_investments_status on public.investments(status);
-create index idx_transactions_user on public.transactions(user_id);
-create index idx_payouts_user on public.payouts(user_id);
-create index idx_bot_profits_date on public.bot_profits(date desc);
-create index idx_deposit_wallets_status on public.deposit_wallets(status);
-create index idx_users_email on public.users(email);
-create index idx_users_token on public.users(token);
+-- INDEXES (if not exists)
+create index if not exists idx_investments_user on public.investments(user_id);
+create index if not exists idx_investments_status on public.investments(status);
+create index if not exists idx_transactions_user on public.transactions(user_id);
+create index if not exists idx_payouts_user on public.payouts(user_id);
+create index if not exists idx_bot_profits_date on public.bot_profits(date desc);
+create index if not exists idx_deposit_wallets_status on public.deposit_wallets(status);
+create index if not exists idx_users_email on public.users(email);
+create index if not exists idx_users_token on public.users(token);
 
 -- UPDATED_AT trigger
 create or replace function update_updated_at() returns trigger as $$
@@ -144,10 +144,10 @@ begin
 end;
 $$ language plpgsql;
 
+drop trigger if exists trg_users_updated_at on public.users;
 create trigger trg_users_updated_at before update on public.users for each row execute function update_updated_at();
 
--- RLS - for now disable RLS for backend service role (backend uses service_role key)
--- Enable but allow all for service_role
+-- RLS
 alter table public.users enable row level security;
 alter table public.investments enable row level security;
 alter table public.transactions enable row level security;
@@ -157,7 +157,18 @@ alter table public.bot_profits enable row level security;
 alter table public.deposit_logs enable row level security;
 alter table public.otps enable row level security;
 
--- Policies for service_role (bypass) and anon read for profits
+-- Drop old policies if exists
+drop policy if exists "Allow all for service_role" on public.users;
+drop policy if exists "Allow all for service_role" on public.investments;
+drop policy if exists "Allow all for service_role" on public.transactions;
+drop policy if exists "Allow all for service_role" on public.payouts;
+drop policy if exists "Allow all for service_role" on public.deposit_wallets;
+drop policy if exists "Allow all for service_role" on public.bot_profits;
+drop policy if exists "Allow all for service_role" on public.deposit_logs;
+drop policy if exists "Allow all for service_role" on public.otps;
+drop policy if exists "Public read profits" on public.bot_profits;
+
+-- Policies
 create policy "Allow all for service_role" on public.users for all using (true) with check (true);
 create policy "Allow all for service_role" on public.investments for all using (true) with check (true);
 create policy "Allow all for service_role" on public.transactions for all using (true) with check (true);
@@ -166,14 +177,12 @@ create policy "Allow all for service_role" on public.deposit_wallets for all usi
 create policy "Allow all for service_role" on public.bot_profits for all using (true) with check (true);
 create policy "Allow all for service_role" on public.deposit_logs for all using (true) with check (true);
 create policy "Allow all for service_role" on public.otps for all using (true) with check (true);
-
--- Public read for profits (chart)
 create policy "Public read profits" on public.bot_profits for select using (true);
 
--- VIEW for pool stats
+-- VIEW FIXED
+drop view if exists public.pool_stats;
 create or replace view public.pool_stats as
 select
   (select count(*) from public.users where status='ACTIVE') as total_users,
   (select coalesce(sum(amount),0) from public.investments where status='APPROVED') as total_pool,
-  (select coalesce(sum(total_profit),0) from public.bot_profits) as total_profit_all,
-  (select * from public.bot_profits order by timestamp desc limit 1) as latest_profit;
+  (select coalesce(sum(total_profit),0) from public.bot_profits) as total_profit_all;
