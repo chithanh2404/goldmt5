@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: gold-mt5-backend
+    env: node
+    plan: starter
+    region: singapore
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: BOT_SECRET
+        value: qmMf9ST5JEBcqVsOfhLaYnjl2KJA2lva
+      - key: BSCSCAN_API_KEY
+        sync: false
+      - key: BSC_USDT_CONTRACT
+        value: 0x55d398326f99059ff775485246999027b3197955
+      - key: AUTO_CHECK_ENABLED
+        value: true
+      - key: AUTO_CHECK_CRON
+        value: "*/1 * * * *"
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: ADMIN_EMAILS
+        value: admin@gmail.com,chithanh2404@gmail.com
+      - key: FRONTEND_URL
+        sync: false
+
+  - type: web
+    name: gold-mt5-frontend
+    env: static
+    plan: free
+    region: singapore
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false

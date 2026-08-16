@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.mono{font-family:'JetBrains Mono',monospace}
+.thin-scrollbar::-webkit-scrollbar{width:4px;height:4px}
+.thin-scrollbar::-webkit-scrollbar-track{background:transparent}
+.thin-scrollbar::-webkit-scrollbar-thumb{background:#3a2e0f;border-radius:10px}
+.modal-backdrop{backdrop-filter:blur(12px)}
+@keyframes toastIn{from{transform:translateX(100%) scale(0.9);opacity:0}to{transform:translateX(0) scale(1);opacity:1}}
+@keyframes progressShrink{from{width:100%}to{width:0%}}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.btn-gold{background:linear-gradient(135deg,#fbbf24 0%,#eab308 50%,#d97706 100%);color:#000;font-weight:800;border-radius:9999px;padding:10px 22px;font-size:13px;border:none;cursor:pointer;transition:all 0.2s ease;box-shadow:0 2px 8px rgba(234,179,8,0.2);display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;}
+.btn-gold:hover{background:linear-gradient(135deg,#eab308 0%,#d97706 100%);transform:translateY(-1px);box-shadow:0 6px 16px rgba(234,179,8,0.35);}
+.btn-gold-outline{background:transparent;border:1.5px solid #eab308;color:#eab308;font-weight:700;border-radius:9999px;padding:9px 20px;font-size:13px;cursor:pointer;transition:all 0.2s ease;}
+.btn-gold-outline:hover{background:linear-gradient(135deg,#fbbf24,#eab308);color:#000;border-color:transparent;}
+.modal-gold-wrapper{background:#15151f;border-radius:24px;border:1px solid #23232f;box-shadow:0 25px 80px rgba(0,0,0,0.6);max-width:90vw;max-height:90vh;overflow:auto;}
+.modal-gold-inner{background:transparent;border-radius:24px;padding:24px;position:relative;}
