@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { CONFIG } from './config.js';
+import { CONFIG } from '../config.js';
 
 // Old SHA256 for migration compatibility
 export function hashSHA256(p){
@@ -15,11 +15,9 @@ export async function hashPassword(p){
 }
 
 export async function comparePassword(p, hash){
-  // try bcrypt first, fallback to SHA256 for old users
   if(hash.startsWith('$2')){
     return await bcrypt.compare(p, hash);
   } else {
-    // old SHA256
     return hashSHA256(p) === hash;
   }
 }
@@ -47,7 +45,6 @@ export function formatVN(){
 }
 
 export function getMT5Time(){
-  // MT5 slow 4h vs VN
   const now = new Date();
   return new Date(now.getTime() - 4*60*60*1000);
 }
