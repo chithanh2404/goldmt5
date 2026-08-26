@@ -16,8 +16,18 @@ dotenv.config();
 
 const app = express();
 app.use(cors({ origin: '*', methods: ['GET','POST','OPTIONS'], allowedHeaders: ['Content-Type','Authorization'] }));
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ 
+  limit: '2mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+app.use(express.urlencoded({ 
+  extended: true,
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 
 // Logging
 app.use((req,res,next)=>{
