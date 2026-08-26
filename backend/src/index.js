@@ -7,7 +7,10 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import walletRoutes from './routes/wallet.js';
 import adminRoutes from './routes/admin.js';
+import bankRoutes from './routes/bank.js';
+import sepayRoutes from './routes/sepay.js';
 import { autoCheckDeposits } from './services/autocheck.js';
+import { freeStaleBanks } from './routes/bank.js';
 
 dotenv.config();
 
@@ -23,20 +26,19 @@ app.use((req,res,next)=>{
 });
 
 // Routes
-app.get('/', (req,res)=> res.json({ success: true, message: 'GOLD MT5 API - Supabase + OnRender v1', time: new Date().toISOString() }));
-app.get('/api/ping', (req,res)=> res.json({ success: true, time: new Date(), message: 'API OK' }));
+app.get('/', (req,res)=> res.json({ success: true, message: 'GOLD MT5 API - Supabase + OnRender v2 BANK+SEPAY', time: new Date().toISOString() }));
+app.get('/api/ping', (req,res)=> res.json({ success: true, time: new Date(), message: 'API OK - BANK SEPAY READY' }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/wallet', walletRoutes);
+app.use('/api/bank', bankRoutes);
+app.use('/api/sepay-webhook', sepayRoutes);
 app.use('/api', adminRoutes); // contains /profits, /bot-push, /admin-*, /cron-check, etc
 
 // Legacy compatibility for old Blogger frontend calling APPSCRIPT_URL with action
 app.post('/api/legacy', async (req,res)=>{
   const { action, ...payload } = req.body;
-  // map old actions to new routes logic - simple proxy for backwards compat
-  // For now redirect to appropriate handlers via internal fetch simulation
-  // You should update frontend to use /api/* instead
   return res.json({ error: 'Legacy endpoint deprecated, please use new API', action });
 });
 
@@ -54,11 +56,16 @@ app.listen(CONFIG.PORT, ()=>{
   if(CONFIG.AUTO_CHECK_ENABLED){
     console.log(`⏰ Auto-check cron enabled: ${CONFIG.AUTO_CHECK_CRON}`);
     cron.schedule(CONFIG.AUTO_CHECK_CRON, async ()=>{
-      console.log('⏰ Running auto-check deposits...');
+      console.log('⏰ Running auto-check deposits (USDT BSCScan)...');
       const result = await autoCheckDeposits();
       console.log('Auto-check result:', result);
     });
+    // Thêm cron giải phóng bank BUSY quá 60p mỗi 5 phút
+    cron.schedule('*/5 * * * *', async ()=>{
+      console.log('⏰ Free stale banks...');
+      await freeStaleBanks();
+    });
   } else {
-    console.log('⏸️ Auto-check disabled');
+    console.log('⏸ Auto-check disabled');
   }
 });
