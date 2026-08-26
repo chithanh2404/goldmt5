@@ -1,7 +1,6 @@
 import express from 'express';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin } from '../auth.js';
-import fetch from 'node-fetch';
 
 const router = express.Router();
 
@@ -18,7 +17,8 @@ async function getRate() {
         return cachedRate;
       }
     }
-    const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=vnd', { timeout: 5000 });
+    // Dùng fetch global của Node 20, không cần node-fetch
+    const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=vnd');
     const cgJson = await cgRes.json();
     if (cgJson?.tether?.vnd) {
       cachedRate = { rate: parseFloat(cgJson.tether.vnd), updatedAt: Date.now(), source: 'coingecko' };
@@ -34,13 +34,11 @@ export async function getUsdtVndRate() {
   return await getRate();
 }
 
-// GET /api/bank/usdt-vnd-rate
 router.get('/usdt-vnd-rate', async (req, res) => {
   const r = await getRate();
   res.json({ success: true, rate: r.rate, source: r.source, updatedAt: r.updatedAt });
 });
 
-// POST /api/bank/request-deposit
 router.post('/request-deposit', authenticate, async (req, res) => {
   try {
     const { vndAmount, rate } = req.body;
@@ -117,7 +115,6 @@ router.post('/confirm-deposit', authenticate, async (req, res) => {
   res.json({ success: true, message: 'Đã ghi nhận, SePay sẽ tự duyệt khi tiền về' });
 });
 
-// ADMIN
 router.get('/admin/list', authenticate, requireAdmin, async (req, res) => {
   const { data: banks } = await supabase.from('bank_accounts').select('*').order('created_at', { ascending: true });
   const rateInfo = await getRate();
@@ -163,7 +160,4 @@ export async function freeStaleBanks() {
   await supabase.from('bank_accounts').update({ status: 'AVAILABLE', busy_by_email: null, busy_amount: null, assigned_at: null }).eq('status','BUSY').lt('assigned_at', oneHourAgo);
 }
 
-setInterval(freeStaleBanks, 5*60*1000);
-
 export default router;
- 
