@@ -12,20 +12,21 @@ let cachedRate = { rate: 26500, updatedAt: 0, source: 'default' };
 
 async function getRate() {
   try {
+    // Ưu tiên 1: CoinGecko realtime - lấy ngay lúc user nạp
+    try {
+      const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=vnd');
+      const cgJson = await cgRes.json();
+      if (cgJson?.tether?.vnd) {
+        cachedRate = { rate: parseFloat(cgJson.tether.vnd), updatedAt: Date.now(), source: 'coingecko_realtime' };
+        return cachedRate;
+      }
+    } catch(e){ console.log('CoinGecko fail', e.message); }
+
+    // Ưu tiên 2: Admin set nếu có và mới (dùng khi CoinGecko die)
     const { data: setting } = await supabase.from('settings').select('value, updated_at').eq('key','usdt_vnd_rate').single();
     if (setting?.value) {
       const dbRate = parseFloat(setting.value);
-      const age = Date.now() - new Date(setting.updated_at).getTime();
-      if (age < 24*60*60*1000) {
-        cachedRate = { rate: dbRate, updatedAt: Date.now(), source: 'admin_db' };
-        return cachedRate;
-      }
-    }
-    // Dùng fetch global của Node 20, không cần node-fetch
-    const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=vnd');
-    const cgJson = await cgRes.json();
-    if (cgJson?.tether?.vnd) {
-      cachedRate = { rate: parseFloat(cgJson.tether.vnd), updatedAt: Date.now(), source: 'coingecko' };
+      cachedRate = { rate: dbRate, updatedAt: new Date(setting.updated_at).getTime(), source: 'admin_db' };
       return cachedRate;
     }
   } catch (e) {
