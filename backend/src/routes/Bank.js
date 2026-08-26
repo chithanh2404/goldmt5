@@ -1,27 +1,23 @@
+import express from 'express';
+import { supabase } from '../supabase.js';
+import { authenticate, requireAdmin } from '../auth.js';
+import fetch from 'node-fetch';
 
-const express = require('express');
 const router = express.Router();
-const { supabase } = require('../supabase');
-const { authenticate, requireAdmin } = require('../auth');
-const fetch = require('node-fetch');
 
-// Cache rate trong memory + DB
 let cachedRate = { rate: 26500, updatedAt: 0, source: 'default' };
 
 async function getRate() {
   try {
-    // 1. Ưu tiên DB settings
     const { data: setting } = await supabase.from('settings').select('value, updated_at').eq('key','usdt_vnd_rate').single();
-    if (setting && setting.value) {
+    if (setting?.value) {
       const dbRate = parseFloat(setting.value);
       const age = Date.now() - new Date(setting.updated_at).getTime();
-      // Nếu admin set trong 24h thì dùng luôn
       if (age < 24*60*60*1000) {
         cachedRate = { rate: dbRate, updatedAt: Date.now(), source: 'admin_db' };
         return cachedRate;
       }
     }
-    // 2. CoinGecko
     const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=vnd', { timeout: 5000 });
     const cgJson = await cgRes.json();
     if (cgJson?.tether?.vnd) {
@@ -34,13 +30,17 @@ async function getRate() {
   return cachedRate;
 }
 
-// GET /api/bank/usdt-vnd-rate - public, user thấy khi nạp VND
+export async function getUsdtVndRate() {
+  return await getRate();
+}
+
+// GET /api/bank/usdt-vnd-rate
 router.get('/usdt-vnd-rate', async (req, res) => {
   const r = await getRate();
   res.json({ success: true, rate: r.rate, source: r.source, updatedAt: r.updatedAt });
 });
 
-// POST /api/bank/request-deposit - user tạo lệnh nạp VND
+// POST /api/bank/request-deposit
 router.post('/request-deposit', authenticate, async (req, res) => {
   try {
     const { vndAmount, rate } = req.body;
@@ -52,12 +52,10 @@ router.post('/request-deposit', authenticate, async (req, res) => {
     const useRate = parseFloat(rate) || rateInfo.rate;
     const usdtAmount = vnd / useRate;
 
-    // Xoay vòng bank giống ví USDT: lấy bank AVAILABLE đầu tiên, khóa BUSY
     const { data: banks } = await supabase.from('bank_accounts').select('*').eq('status','AVAILABLE').limit(10);
     let selectedBank = null;
     if (banks && banks.length > 0) {
       selectedBank = banks[0];
-      // Khóa bank này BUSY 60p
       await supabase.from('bank_accounts').update({
         status: 'BUSY',
         busy_by_email: user.email,
@@ -65,18 +63,14 @@ router.post('/request-deposit', authenticate, async (req, res) => {
         assigned_at: new Date().toISOString()
       }).eq('id', selectedBank.id);
     } else {
-      // fallback lấy bank đầu tiên
-      const { data: anyBank } = await supabase.from('bank_accounts').select('*').limit(1).single();
+      const { data: anyBank } = await supabase.from('bank_accounts').select('*').limit(1).maybeSingle();
       selectedBank = anyBank;
-      if (!selectedBank) return res.json({ success: false, error: 'Chưa cấu hình tài khoản ngân hàng nhận tiền' });
+      if (!selectedBank) return res.json({ success: false, error: 'Chưa cấu hình tài khoản ngân hàng nhận tiền. Admin thêm trong Quản lý Ngân hàng.' });
     }
 
     const content = `${user.email}_chuyenkhoan`;
-    const depositId = `BANK_${Date.now()}_${user.id.slice(0,6)}`;
 
-    // Lưu bank_deposits
     const { data: deposit, error } = await supabase.from('bank_deposits').insert({
-      id: undefined, // auto uuid, nhưng mình lưu deposit code vào content? dùng id riêng
       user_id: user.id,
       email: user.email,
       vnd_amount: vnd,
@@ -87,7 +81,8 @@ router.post('/request-deposit', authenticate, async (req, res) => {
       status: 'PENDING'
     }).select().single();
 
-    // Tạo investments PENDING luôn (để admin thấy)
+    if (error) throw error;
+
     await supabase.from('investments').insert({
       user_id: user.id,
       amount: usdtAmount,
@@ -99,15 +94,14 @@ router.post('/request-deposit', authenticate, async (req, res) => {
       status: 'PENDING'
     });
 
-    // Telegram notify
     try {
-      const { sendTelegram } = require('../services/telegram');
-      sendTelegram(`🏦 Yêu cầu nạp BANK: ${user.email} - ${vnd.toLocaleString('vi-VN')} VND ~ ${usdtAmount.toFixed(2)} USDT\nNội dung: ${content}\nBank: ${selectedBank.bank_name} ${selectedBank.account_number}`);
+      const { sendTelegram } = await import('../services/telegram.js');
+      if (sendTelegram) sendTelegram(`🏦 Yêu cầu nạp BANK: ${user.email} - ${vnd.toLocaleString('vi-VN')} VND ~ ${usdtAmount.toFixed(2)} USDT\nNội dung: ${content}\nBank: ${selectedBank.bank_name} ${selectedBank.account_number}`);
     } catch(e){}
 
     res.json({
       success: true,
-      depositId: deposit?.id || depositId,
+      depositId: deposit?.id,
       bank: selectedBank,
       usdtAmount,
       rate: useRate,
@@ -119,13 +113,11 @@ router.post('/request-deposit', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/bank/confirm-deposit - user bấm đã chuyển khoản
 router.post('/confirm-deposit', authenticate, async (req, res) => {
-  // Chỉ ghi nhận, chờ SePay webhook tự duyệt
   res.json({ success: true, message: 'Đã ghi nhận, SePay sẽ tự duyệt khi tiền về' });
 });
 
-// ========== ADMIN ==========
+// ADMIN
 router.get('/admin/list', authenticate, requireAdmin, async (req, res) => {
   const { data: banks } = await supabase.from('bank_accounts').select('*').order('created_at', { ascending: true });
   const rateInfo = await getRate();
@@ -140,7 +132,8 @@ router.post('/admin/add', authenticate, requireAdmin, async (req, res) => {
     bank_name: bankName || bankCode,
     account_number: accountNumber,
     account_name: accountName,
-    label: label || `Bank ${Date.now()}`
+    label: label || `Bank ${Date.now()}`,
+    status: 'AVAILABLE'
   }).select();
   if (error) return res.json({ success: false, error: error.message });
   const { data: banks } = await supabase.from('bank_accounts').select('*');
@@ -165,12 +158,11 @@ router.post('/admin/update-rate', authenticate, requireAdmin, async (req, res) =
   res.json({ success: true, rate: parseFloat(rate) });
 });
 
-// Cron: tự động giải phóng bank BUSY quá 60 phút (giống ví USDT)
-async function freeStaleBanks() {
+export async function freeStaleBanks() {
   const oneHourAgo = new Date(Date.now() - 60*60*1000).toISOString();
   await supabase.from('bank_accounts').update({ status: 'AVAILABLE', busy_by_email: null, busy_amount: null, assigned_at: null }).eq('status','BUSY').lt('assigned_at', oneHourAgo);
 }
 
 setInterval(freeStaleBanks, 5*60*1000);
 
-module.exports = router;
+export default router;
